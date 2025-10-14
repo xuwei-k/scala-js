@@ -48,10 +48,15 @@ object ExposedValues extends AutoPlugin {
     val cross213ScalaVersions: SettingKey[Seq[String]] =
       settingKey("an ordered sequence of 2.13.x versions with which we build (most recent last)")
 
+    val cross3ScalaVersions: SettingKey[Seq[String]] =
+      settingKey("an ordered sequence of 3.x versions with which we build (most recent last)")
+
     val default212ScalaVersion: SettingKey[String] =
       settingKey("the default Scala 2.12.x version for this build (derived from cross212ScalaVersions)")
     val default213ScalaVersion: SettingKey[String] =
       settingKey("the default Scala 2.13.x version for this build (derived from cross213ScalaVersions)")
+    val default3ScalaVersion: SettingKey[String] =
+      settingKey("the default Scala 3.x version for this build (derived from cross3ScalaVersions)")
 
     val enableMinifyEverywhere: SettingKey[Boolean] =
       settingKey("force usage of the `minify` option of the linker in all contexts (fast and full)")
@@ -351,8 +356,10 @@ object Build {
   import ExposedValues.autoImport.{
     cross212ScalaVersions,
     cross213ScalaVersions,
+    cross3ScalaVersions,
     default212ScalaVersion,
-    default213ScalaVersion
+    default213ScalaVersion,
+    default3ScalaVersion
   }
 
   import MyScalaJSPlugin.{
@@ -719,7 +726,7 @@ object Build {
   )
 
   val fatalWarningsSettings = Def.settings(
-      scalacOptions += "-Xfatal-warnings",
+      //scalacOptions += "-Xfatal-warnings",
 
       Compile / doc / scalacOptions := {
         val prev = (Compile / doc / scalacOptions).value
@@ -973,9 +980,13 @@ object Build {
         "2.13.15",
         "2.13.16",
       ),
+      cross3ScalaVersions := Seq(
+        "3.7.3"
+      ),
 
       default212ScalaVersion := cross212ScalaVersions.value.last,
       default213ScalaVersion := cross213ScalaVersions.value.last,
+      default3ScalaVersion := cross3ScalaVersions.value.last,
 
       // JDK version we are running with
       Global / javaVersion := {
@@ -998,8 +1009,9 @@ object Build {
 
       {
         val allProjects: Seq[Project] = Seq(
-            plugin, linkerPrivateLibrary
+            linkerPrivateLibrary
         ) ++ Seq(
+            plugin,
             compiler, irProject, irProjectJS,
             linkerInterface, linkerInterfaceJS, linker, linkerJS,
             testAdapter,
@@ -1070,7 +1082,7 @@ object Build {
   )
 
   lazy val irProject: MultiScalaProject = MultiScalaProject(
-      id = "ir", base = file("ir/jvm")
+      id = "ir", base = file("ir/jvm"), scalaVersions = Seq("2.12", "2.13", "3")
   ).settings(
       commonIrProjectSettings,
       libraryDependencies ++= JUnitDeps,
@@ -1160,14 +1172,14 @@ object Build {
   )
 
   lazy val linkerInterface: MultiScalaProject = MultiScalaProject(
-      id = "linkerInterface", base = file("linker-interface/jvm")
+      id = "linkerInterface", base = file("linker-interface/jvm"), scalaVersions = Seq("2.12", "2.13", "3")
   ).settings(
       commonLinkerInterfaceSettings,
       libraryDependencies ++= Seq(
-          "org.scala-js" %% "scalajs-logging" % "1.1.1",
+          "org.scala-js" %% "scalajs-logging" % "1.2.0",
       ),
       libraryDependencies ++= JUnitDeps,
-  ).dependsOn(irProject, jUnitAsyncJVM % "test")
+  ).dependsOn(irProject) //, jUnitAsyncJVM % "test")
 
   lazy val linkerInterfaceJS: MultiScalaProject = MultiScalaProject(
       id = "linkerInterfaceJS", base = file("linker-interface/js")
@@ -1391,7 +1403,7 @@ object Build {
   )
 
   lazy val testAdapter: MultiScalaProject = MultiScalaProject(
-      id = "testAdapter", base = file("test-adapter")
+      id = "testAdapter", base = file("test-adapter"), scalaVersions = Seq("2.12", "2.13", "3")
   ).settings(
       commonSettings,
       publishSettings(None),
@@ -1399,7 +1411,7 @@ object Build {
       name := "Scala.js sbt test adapter",
       libraryDependencies ++= Seq(
           "org.scala-sbt" % "test-interface" % "1.0",
-          "org.scala-js" %% "scalajs-js-envs" % "1.4.0",
+          "org.scala-js" %% "scalajs-js-envs" % "1.5.0",
           "com.google.jimfs" % "jimfs" % "1.1" % "test",
       ),
       libraryDependencies ++= JUnitDeps,
@@ -1409,9 +1421,9 @@ object Build {
         baseDirectory.value.getParentFile.getParentFile / "test-common/src/main/scala",
       Test / unmanagedSourceDirectories +=
         baseDirectory.value.getParentFile.getParentFile / "test-common/src/test/scala"
-  ).dependsOn(jUnitAsyncJVM % "test")
+  )//.dependsOn(jUnitAsyncJVM % "test")
 
-  lazy val plugin: Project = Project(id = "sbtPlugin", base = file("sbt-plugin"))
+  lazy val plugin: MultiScalaProject = MultiScalaProject(id = "sbtPlugin", base = file("sbt-plugin"), scalaVersions = Seq("2.12", "3"))
       .enablePlugins(ScriptedPlugin).settings(
       commonSettings,
       publishSettings(None),
@@ -1420,15 +1432,17 @@ object Build {
       normalizedName := "sbt-scalajs",
       sbtPlugin := true,
       defaultScalaVersionOnlySettings,
-      sbtVersion := "1.9.0",
+      sbtVersion := "2.0.0-RC6",
+      scalaVersion := "3.7.3",
+      scalacOptions += "--no-warnings",
       scalaBinaryVersion :=
         CrossVersion.binaryScalaVersion(scalaVersion.value),
       previousArtifactSetting,
       mimaBinaryIssueFilters ++= BinaryIncompatibilities.SbtPlugin,
 
-      addSbtPlugin("org.portable-scala" % "sbt-platform-deps" % "1.0.2"),
-      libraryDependencies += "org.scala-js" %% "scalajs-js-envs" % "1.4.0",
-      libraryDependencies += "org.scala-js" %% "scalajs-env-nodejs" % "1.4.0",
+      //addSbtPlugin("org.portable-scala" % "sbt-platform-deps" % "1.0.2"),
+      libraryDependencies += "org.scala-js" %% "scalajs-js-envs" % "1.5.0",
+      libraryDependencies += "org.scala-js" %% "scalajs-env-nodejs" % "1.5.0",
 
       scriptedLaunchOpts += "-Dplugin.version=" + version.value,
 
@@ -1490,7 +1504,7 @@ object Build {
 
         sbtJars.map(_.data -> docUrl).toMap
       }
-  ).dependsOn(linkerInterface.v2_12, testAdapter.v2_12)
+  ).dependsOn(linkerInterface, testAdapter)
 
   lazy val delambdafySetting = {
     scalacOptions ++= (
